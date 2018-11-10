@@ -1,0 +1,156 @@
+\documentclass[12pt]{article}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{subfigure}
+\usepackage{textcomp}
+\usepackage{float}
+\usepackage{amssymb}
+\usepackage{siunitx} % Required for alignment
+\usepackage{longtable} % To display tables on several pages
+\usepackage{multirow} % Required for multirows
+\usepackage{booktabs} % For prettier tables
+\usepackage{color,soul}
+\usepackage{diagbox}
+\usepackage[margin=1in]{geometry}
+%\begin{figure}[H] 
+%	\centering 
+%	\includegraphics[width=0.9\textwidth]{Tree.jpg}
+%	\caption{Splitting tree}
+%	\label{P2} 
+%\end{figure}
+%	\begin{table}[h!]
+%	\begin{center}
+%		\caption{Routing Table for Exercise 55.}
+%		\label{tab:table1}
+%		\begin{tabular}{l|c|r}
+%			\textbf{SubnetNumber} & \textbf{SubnetMask} & \textbf{NextHop}\\
+%			$\alpha$ & $\beta$ & $\gamma$ \\
+%			\hline
+%			{2}{*}{12} & 1110.1 & a\\
+%			\hline
+%		\end{tabular}
+%	\end{center}		
+%\end{table}	
+\title{Meeting Summary: Constraint KG}
+\date{2018\\ November 9}
+\author{Prof. Poloczek and Chongke Wu}
+\begin{document}
+\maketitle
+\section{Related Work}
+EI with constraints:
+\begin{itemize}
+	\item very limited
+	\item needs noisefree observations
+	\item needs to find at least one feasible point first before it can start the EIC criterion
+	\item objective and constraints are independent 
+\end{itemize}
+
+PESC: 
+\begin{itemize}
+	\item still supposes constraints and objective are independent
+	\item additivity assumption on acquisition value
+	\item very complicated acquisition function. contrast this with EI or KG that are much easier to compute in practice 
+\end{itemize}
+
+misoKG with multiple information source allows to find an optimum much faster by using cheap approximation. Can we extend misoKG to handle constraints? If we can do that, then we have a huge impact in engineering (materials science, aerospace) and machine learning.
+
+\section{cKG}
+Define Utility
+\begin{equation*}
+ u(x)=\left\{
+\begin{aligned}
+\tau \qquad \text{if x is not feasible} \\
+\text{object}(x) \qquad \text{if x is feasible} 
+\end{aligned}
+\right.
+\end{equation*}
+
+Here we give Expectation notation: $\mathbb{E}_n\left\langle \cdot\right\rangle = \mathbb{E}\left\langle \cdot|x_1,...,x_n\right\rangle $.
+Likewise, the Probability notation: $\text{Pr}_n(\cdot) = \text{Pr}(\cdot|x_1,...,x_n)$. And $\tau$ is some known penalty, Then
+\begin{equation*}
+\mathbb{E}_n[u(x)] = \tau\cdot(1 - \text{Pr}_n(\{\text{x is feasible}\})) +  \mathbb{E}_n[\{\text{x is feasible}\}]\cdot\text{Pr}_n(\{\text{x is feasible}\})
+\end{equation*}
+
+If I am done sampling, I do not get further information and have to recommend a point x now: which one should I pick?
+
+\begin{equation*}
+\text{argmax}_x\quad \mathbb{E}_n[ u(x) ]
+\end{equation*}
+
+Now let's make the step towards KG:
+
+Suppose that we have one more sample, where should we sample next?
+
+$utl_n^* = \text{max}_{x'}\ \mathbb{E}_n[u(x')] $is the best point at time n, $utl_{n+1}^*=\text{max}_{x'}\ \mathbb{E}_{n+1}[u(x')]$ is the best point after making the next observation.
+
+let's maximize the difference:
+\begin{equation*}
+\text{cKG}(x) = \text{max}_x\ \mathbb{E}_n[utl_{n+1}^*|x_{n+1} = x] - utl_n^*
+\end{equation*}
+
+if you read the experimental section of the PESC paper carefully, then you see that there is a notion of a penalty tau for infeasible recommendations.
+
+KG(x) becomes cKG(x) by incorporating constraints into the utility.
+
+in every step, sample an x in 
+$$\text{argmax}_x\ \text{cKG}(x)$$
+
+here we do not take into account multiple IS yet, but we can add them easily afterwards, recall the Bonilla et al paper for multi-task GPs. think of task 0 as the obj(x), and of task 1 as the constraint c(x). Then we have a kernel on domain X, say $K_x$. Let $K_x$ be the ARD 5/2 Matern kernel where the signal variance is fixed to 1.0.
+
+positive definite matrix $K_s$ which gives the relationship between both tasks.
+
+Our goal is to find a point of maximum utility. we have turned this into a one-step acquisition, where we make one observation, we update the posterior, and we iterate. We could sample x at the obj, or at the constraint, or at both.
+
+let $h$ be the function where we observe.
+So $h$ in $\{\text{obj}, \text{constr1}, \text{constr2},...\}$, then
+
+\begin{equation*}
+\text{cKG}(h,x) = \text{max}_x\ \mathbb{E}_n[utl_{n+1}^*|\text{sample $h$ in }x_{n+1} = x] - utl_n^*
+\end{equation*}
+
+\section{Choice of cKG Kernel}
+We need a covariance between the obj and the constraints. Let's use the covariance of a multitask GP, like the one described in the Bonilla et al paper.
+\begin{equation*}
+\text{Cov}( (h,x), (h',x') ) = K_s(h,h') * K_x(x,x')
+\end{equation*}
+
+where $K_x$ is a 5/2 Matern kernel with signal variance set 1.0; $K_s$ is a real, symmetric, positive definite matrix (not a covariance function).
+
+Let us set $K_s = L L^T$. L is a lower triangular matrix. It is the Cholesky factor.
+We can represent $K_s$ by $L$, and then we know that $L L^T$ is positive definite as required.
+
+As you said, the generative model is different from the MISO paper. But the MISO paper only requires us to express $\text{Cov}( (h,x), (h',x') )$. in misoKG, we wonder how the observation of some x at IS s affects the optimum at IS 0. Here, we wonder how the observation of some x at some function h (either the obj or some constraint) affects the optimum under the object.
+
+when you look at the MISO paper, you see the formulation of misoKG(s,x). write the analogous formulation for cKG(h,x).Here is no cost involved!
+
+You can use this $\text{Cov}( (h,x), (h',x') ) = K_s(h,h') * K_x(x,x')$
+
+The covariance matrix $ K = K_s \otimes K_x$, where $\otimes$ is Kronecker product.
+
+keep in mind that the Cholesky factor of the Kronecker product in this case can be written as the Kronecker product of the cholesky factors of $K_s$ and $K_x$ (google for that). Write the analogous formulation for cKG(h,x). Here is no cost involved!
+\section{Sampling}
+
+Suppose that sample x at h and observe $Y_1, Y_2$, etc. For each of these observations, you can compute the resulting expected utility. In the MISO, I integrate over all possible observations Y that we can get by sampling h(x). Here, let us focus first on the case that we take a finite number of MC samples.
+
+In fact, let us start with only one observation $Y_1$ when sampling h(x). what is $\text{max}_{x'}\  E_{n+1}[u(x')]$ if we suppose that have sampled x at $h$ and observed $\text{Y}_1$?
+
+we know how the posterior mean and the posterior variance change, that's why we can compute a point of maximum expected utility. then we can take a large number of sampled obs Y and average for each x the utility under all these hypothetical realizations. in misoKG we can analytically compute that for all possible observations Y, because the posterior optimum depends only on the mean (the expected object value).
+
+Here it is more complicated, since the utility depends on the feasibility under the constraint and on the conditional mean under the obj (the expected obj value conditioned on that x is feasible), but we can approximate it.
+
+$\text{Pr}_n(\{\text{x is feasible}\})$ is Gaussian. We know the mean and the variance at $x'$ for function (constraint) $h$ before making the observation.
+And we have the update equations that tell us how the mean and the variance at $x'$ change if we observe $Y_1$ when sampling $x$ at function $h$.
+
+
+Thus, we can compute what the prob of being feasible is conditioned on that we observe $Y_1$ when sampling $h(x)$.
+
+
+
+\end{document}
+
+
+
+
+

@@ -14,6 +14,7 @@
 \usepackage{color,soul}
 \usepackage{diagbox}
 \usepackage[margin=1in]{geometry}
+\usepackage{bbm}
 %\begin{figure}[H] 
 %	\centering 
 %	\includegraphics[width=0.9\textwidth]{Tree.jpg}
@@ -47,9 +48,9 @@ EI with constraints:
 	\item objective and constraints are independent 
 \end{itemize}
 
-PESC: 
+PESC: $\mathbbm{1}$
 \begin{itemize}
-	\item still supposes constraints and objective are independent
+	\item \hl{still supposes constraints and objective are independent} 
 	\item additivity assumption on acquisition value
 	\item very complicated acquisition function. contrast this with EI or KG that are much easier to compute in practice 
 \end{itemize}
@@ -73,6 +74,12 @@ Likewise, the Probability notation: $\text{Pr}_n(\cdot) = \text{Pr}(\cdot|x_1,..
 \mathbb{E}_n[u(x)] = \tau\cdot(1 - \text{Pr}_n(\{\text{x is feasible}\})) +  \mathbb{E}_n[\{\text{x is feasible}\}]\cdot\text{Pr}_n(\{\text{x is feasible}\})
 \end{equation*}
 
+%\begin{align*}
+%\text{aaaaa} 
+%&= xxxxxxx \\
+%&= yyyyy
+%\end{align*}
+
 If I am done sampling, I do not get further information and have to recommend a point x now: which one should I pick?
 
 \begin{equation*}
@@ -83,11 +90,11 @@ Now let's make the step towards KG:
 
 Suppose that we have one more sample, where should we sample next?
 
-$utl_n^* = \text{max}_{x'}\ \mathbb{E}_n[u(x')] $is the best point at time n, $utl_{n+1}^*=\text{max}_{x'}\ \mathbb{E}_{n+1}[u(x')]$ is the best point after making the next observation.
+$u_n(x) =\mathbb{E}_n[u(x')] $, $u_n^* = \text{max}_{x'}\ u_n(x) $is the best point at time n, $u_{n+1}^*=\text{max}_{x'}\ u_{n+1}(x)$ is the best point after making the next observation.
 
 let's maximize the difference:
 \begin{equation*}
-\text{cKG}(x) = \text{max}_x\ \mathbb{E}_n[utl_{n+1}^*|x_{n+1} = x] - utl_n^*
+\text{cKG}(x) =  \mathbb{E}_n[u_{n+1}^*|x_{n+1} = x] - u_n^*
 \end{equation*}
 
 if you read the experimental section of the PESC paper carefully, then you see that there is a notion of a penalty tau for infeasible recommendations.
@@ -107,7 +114,7 @@ let $h$ be the function where we observe.
 So $h$ in $\{\text{obj}, \text{constr1}, \text{constr2},...\}$, then
 
 \begin{equation*}
-\text{cKG}(h,x) = \text{max}_x\ \mathbb{E}_n[utl_{n+1}^*|\text{sample $h$ in }x_{n+1} = x] - utl_n^*
+\text{cKG}(h,x) =  \mathbb{E}_n[u_{n+1}^*|\text{sample $h$ in }x_{n+1} = x] - u_n^*
 \end{equation*}
 
 \section{Choice of cKG Kernel}
@@ -129,7 +136,8 @@ You can use this $\text{Cov}( (h,x), (h',x') ) = K_s(h,h') * K_x(x,x')$
 
 The covariance matrix $ K = K_s \otimes K_x$, where $\otimes$ is Kronecker product.
 
-keep in mind that the Cholesky factor of the Kronecker product in this case can be written as the Kronecker product of the cholesky factors of $K_s$ and $K_x$ (google for that). Write the analogous formulation for cKG(h,x). Here is no cost involved!
+keep in mind that the Cholesky factor of the Kronecker product in this case can be written as the Kronecker product of the cholesky factors of $K_s$ and $K_x$ (google for that).\hl{ Write the analogous formulation for cKG(h,x). Here is no cost involved!}
+
 \section{Sampling}
 
 Suppose that sample x at h and observe $Y_1, Y_2$, etc. For each of these observations, you can compute the resulting expected utility. In the MISO, I integrate over all possible observations Y that we can get by sampling h(x). Here, let us focus first on the case that we take a finite number of MC samples.
@@ -146,7 +154,43 @@ And we have the update equations that tell us how the mean and the variance at $
 
 Thus, we can compute what the prob of being feasible is conditioned on that we observe $Y_1$ when sampling $h(x)$.
 
+\section{Summary}
+In brief, the cKG formulation is shown as follows:
 
+\subsection{Modeling}
+The objective and constraint are Gaussian processes, we set the prior as:
+\begin{equation*}
+\begin{aligned}
+&\mu_0(h,x) = \mu_0(x)\\
+&\Sigma_0((h,x),(h',x')) = K_s(h,h')*K_x(x,x')
+\end{aligned}
+\end{equation*}
+\subsection{Inference}
+We can predict mean value and covariance at point $(h,x_*)$ by previous observation $y_{1:n}$:
+
+\begin{equation*}
+\begin{aligned}
+&\mu_n(h,x_*) = \mu_0(x_*)+(K_s \otimes K_*^x)\Sigma^{-1}(y_1:n - \mu_0(x_{1:n}))\\
+&\Sigma_n((h,x*),(h,x*)) =  K_s(h,h')*K_x(x,x')- (K_s \otimes K_*^x)\Sigma^{-1}(K_s \otimes K_*^x)^T
+\end{aligned}
+\end{equation*}
+Where $K_s \otimes K_*^x = (LL^T)\otimes K_*^x = (L\otimes K_*^x)L^T$.
+\subsection{Acquisition}
+We choose to sample at:
+$$\text{argmax}_x\ \text{cKG}(x)$$
+The cKG factor:
+\begin{equation*}
+\text{cKG}(h,x) =  \mathbb{E}_n[u_{n+1}^*|\text{sample $h$ in }x_{n+1} = x] - u_n^*
+\end{equation*}
+where
+\begin{equation*}
+\begin{aligned}
+&\mathbb{E}_n[u_{n+1}^*|\text{sample $h$ in }x_{n+1} = x]\\
+&=\mathbb{E}_n[\text{max}_{x'\in \mathcal{A}}u_{n+1}(x)|\text{sample $h$ in }x_{n+1} = x]\\
+&=\mathbb{E}_n[\text{max}_{x'\in \mathcal{A}}\{\mu_n(x')+\overline{\sigma}_{x'}(x)\cdot Z|\text{sample $h$ in }x_{n+1} = x\}
+\end{aligned}
+\end{equation*}
+Here $Z \sim \mathcal{N}(0,1)$, $\overline{\sigma}_{x'}(x)=\Sigma^n((0,x),(h,x))/[\lambda_{\ell}(x) + \Sigma^n((h,x),(h,x))]^{\frac{1}{2}}$. Where $\Sigma^n$ is the posterior covariance matrix given observation $x_{1:n}\ \text{and}\ y_{1:n}$.
 
 \end{document}
 
